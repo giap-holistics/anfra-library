@@ -3,3 +3,4 @@ result*
 .env
 host/dist/
 build/
+app/apps/library.html

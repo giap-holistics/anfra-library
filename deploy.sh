@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Library + host image and deploy it to the prototypes platform.
-#   1. builds the host for production and stages it with production node_modules in a temp dir
-#   2. nix builds the image (anfra v0.11.1 from source + pinned sidecars + app/ + build/host + node 22), linux/amd64
+#   1. builds the app (pnpm check + build → app/apps/library.html), builds the host for production, and stages it with production node_modules in a temp dir
+#   2. nix builds the image (anfra v0.11.1 from source + pinned sidecars + app/ + the staged host + node 22), linux/amd64
 #   3. skopeo pushes it to ghcr.io/holistics/<name>:<tag> (a classic GitHub token with repo + write:packages)
 #   4. proto deploy --image updates the preview PR; the site is https://<name>.pages.holistics.dev
 # Usage: ./deploy.sh [name]          default name: anfra-library
@@ -16,6 +16,9 @@ IMG=ghcr.io/holistics/$NAME:$TAG
 # Build outputs, the skopeo policy and skopeo's blob cache live in a temp dir, not in the repo.
 WORK=${WORK:-$(mktemp -d /tmp/anfra-library-deploy.XXXXXX)}
 shell() { nix develop "$ROOT" -c bash -c "$1"; }
+
+echo "== build the app (apps/library.html is build output; tsc must pass)"
+shell "set -e; cd '$ROOT/app'; CI=1 pnpm install --frozen-lockfile; pnpm check; pnpm build"
 
 echo "== build the host"
 shell "set -e; cd '$ROOT/host'; CI=1 pnpm install --frozen-lockfile; pnpm build
@@ -33,8 +36,17 @@ export PROTO_GITHUB_TOKEN=$TOKEN
 USER_LOGIN=$(GH_TOKEN=$TOKEN gh api user -q .login)
 echo "== push $IMG as $USER_LOGIN"
 POLICY=$WORK/skopeo-policy.json; printf '{"default":[{"type":"insecureAcceptAnything"}]}' > "$POLICY"
-# GHCR now and then answers a mid-push token request with 403: retry (layers already pushed are skipped).
-shell "XDG_DATA_HOME='$WORK/xdg' skopeo copy --retry-times 3 --policy '$POLICY' --dest-creds '$USER_LOGIN:\$PROTO_GITHUB_TOKEN' 'docker-archive:$WORK/result-image' 'docker://$IMG'"
+# skopeo's own GHCR login (--dest-creds) fails here: it re-requests a bearer token for every blob, and GHCR
+# answers with 403 partway through ("trying to reuse blob … 403 Forbidden"), on every try. A registry token
+# fetched once and passed with --dest-registry-token works.
+REG_TOKEN=$(printf 'user = "%s:%s"\n' "$USER_LOGIN" "$TOKEN" | curl -sfK- \
+  "https://ghcr.io/token?service=ghcr.io&scope=repository:holistics/$NAME:pull,push" | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+export REG_TOKEN
+for try in 1 2 3; do
+  shell "skopeo copy --retry-times 3 --policy '$POLICY' --dest-registry-token \"\$REG_TOKEN\" 'docker-archive:$WORK/result-image' 'docker://$IMG'" && break
+  [ "$try" = 3 ] && { echo "push failed 3 times" >&2; exit 1; }
+  echo "push failed (try $try); retrying in 10 s" >&2; sleep 10
+done
 
 echo "== proto deploy"
 ~/.local/bin/proto deploy --image "$IMG" --port 8080 --name "$NAME" --yes

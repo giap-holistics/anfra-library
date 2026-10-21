@@ -85,7 +85,7 @@
 
         # The container for the prototypes platform (linux/amd64). Three impure inputs, all absolute paths:
         #   ANFRA_SIDECARS  folder with anfra-node (v0.8.0) and canal-query (2.19.1): `make sidecars` in an anfra checkout
-        #   LIBRARY_REPO    the Data Folder, ./app
+        #   LIBRARY_REPO    the Data Folder, ./app (apps/library.html must be built first: deploy.sh runs `pnpm build`)
         #   HOST_PROD       the host built for production with production node_modules (deploy.sh stages it in ./build/host)
         # Build: nix build --impure .#image  (deploy.sh does all of it)
         image = let
