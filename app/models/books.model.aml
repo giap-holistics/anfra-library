@@ -1,0 +1,76 @@
+Model books {
+  type: 'table'
+  label: 'Books'
+  description: 'One row per title in the marketplace catalogue (synthetic, 1,920 titles).'
+  data_source_name: 'library'
+  table_name: 'books'
+
+  dimension isbn {
+    label: 'ISBN'
+    type: 'text'
+    primary_key: true
+    definition: @sql {{ #SOURCE.isbn }};;
+  }
+  dimension title {
+    label: 'Title'
+    type: 'text'
+    definition: @sql {{ #SOURCE.title }};;
+  }
+  dimension author {
+    label: 'Author'
+    type: 'text'
+    definition: @sql {{ #SOURCE.author }};;
+  }
+  dimension category {
+    label: 'Category'
+    description: 'Broad catalogue section: Fiction, Non-fiction, Children & YA, Academic, Comics & Manga, Lifestyle.'
+    type: 'text'
+    definition: @sql {{ #SOURCE.category }};;
+  }
+  dimension genre {
+    label: 'Genre'
+    description: 'Shelf within a category, e.g. Fantasy, Cookery, Shonen.'
+    type: 'text'
+    definition: @sql {{ #SOURCE.genre }};;
+  }
+  dimension market {
+    label: 'Market'
+    description: 'Trade, Mass market, Education, Professional, Gift or Self-published.'
+    type: 'text'
+    definition: @sql {{ #SOURCE.market }};;
+  }
+  dimension target_age {
+    label: 'Target age'
+    description: 'Target reader age band: 0–5, 6–12, 13–17, 18–34, 35–54, 55+. The source column stores the 13–17 band as Teen; it is relabelled here.'
+    type: 'text'
+    definition: @sql CASE WHEN {{ #SOURCE.audience_age }} = 'Teen' THEN '13–17' ELSE {{ #SOURCE.audience_age }} END;;
+  }
+  dimension format {
+    label: 'Format'
+    type: 'text'
+    definition: @sql {{ #SOURCE.format }};;
+  }
+  dimension price {
+    label: 'List price'
+    type: 'number'
+    format: "[\$\$]#,###0.00"
+    definition: @sql {{ #SOURCE.price }};;
+  }
+  dimension rating {
+    label: 'Rating'
+    type: 'number'
+    format: "0.0"
+    definition: @sql {{ #SOURCE.rating }};;
+  }
+  dimension hue {
+    label: 'Cover hue'
+    description: 'Cover colour hue in degrees, used only for drawing spines.'
+    type: 'number'
+    definition: @sql {{ #SOURCE.hue }};;
+  }
+  param price_factor {
+    label: 'Price factor (what-if)'
+    description: 'Multiplier on the list price for the what-if metrics: 1 = unchanged, 0.85 = 15% cheaper, 1.1 = 10% dearer. AQL params take positive literals only, hence a factor rather than a signed delta.'
+    type: 'number'
+  }
+}

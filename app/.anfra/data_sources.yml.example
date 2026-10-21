@@ -1,0 +1,6 @@
+data_sources:
+  library:
+    type: duckdb
+    connection:
+      # absolute: a relative path resolves against canal-query's cwd, not the repo
+      path: <repo>/data/library.duckdb

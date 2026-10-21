@@ -1,0 +1,121 @@
+Dataset library {
+  label: 'Library (synthetic book marketplace)'
+  description: '''Synthetic online book marketplace: 1,920 titles across 6 categories × 8 genres, each also
+tagged with a market and a target age band, with 24 weeks of weekly units and revenue. The
+reporting period is the 12 weeks from 2026-07-27 to 2026-10-18; the 12 weeks before exist for
+period-over-period comparison.'''
+  data_source_name: 'library'
+
+  models: [books, sales]
+  relationships: [
+    relationship(sales.isbn > books.isbn, true),
+  ]
+
+  metric units {
+    label: 'Units sold'
+    type: 'number'
+    description: 'Copies sold in the selected weeks.'
+    format: "#,##0"
+    definition: @aql sum(sales.units_sold) ;;
+  }
+
+  metric revenue {
+    label: 'Revenue'
+    type: 'number'
+    description: 'Units × list price at the time of sale, in the selected weeks.'
+    format: "[\$\$]#,###0"
+    definition: @aql sum(sales.revenue_amount) ;;
+  }
+
+  metric units_prev {
+    label: 'Units, previous 12 weeks'
+    type: 'number'
+    description: 'Units sold in the 12 weeks before the selected weeks (same filters).'
+    format: "#,##0"
+    definition: @aql units | relative_period(sales.week_start, interval(-12 week)) ;;
+  }
+
+  metric revenue_prev {
+    label: 'Revenue, previous 12 weeks'
+    type: 'number'
+    format: "[\$\$]#,###0"
+    definition: @aql revenue | relative_period(sales.week_start, interval(-12 week)) ;;
+  }
+
+  metric units_growth {
+    label: 'Units growth vs previous 12 weeks'
+    type: 'number'
+    format: "+0.0%;-0.0%"
+    definition: @aql units / units_prev - 1 ;;
+  }
+
+  metric revenue_share {
+    label: 'Share of library revenue'
+    type: 'number'
+    description: 'This group’s revenue over the revenue of every title in the selected weeks (book filters are ignored in the denominator).'
+    format: "0.0%"
+    definition: @aql revenue / (revenue | of_all(books)) ;;
+  }
+
+  metric genre_share {
+    label: 'Share of room revenue'
+    type: 'number'
+    description: 'This genre’s revenue over the revenue of all genres under the same room filters.'
+    format: "0.0%"
+    definition: @aql revenue / (revenue | of_all(books.genre)) ;;
+  }
+
+  metric title_share {
+    label: 'Share of shelf revenue'
+    type: 'number'
+    description: 'This title’s revenue over the revenue of all titles under the same shelf filters.'
+    format: "0.0%"
+    definition: @aql revenue / (revenue | of_all(books.isbn)) ;;
+  }
+
+  metric titles {
+    label: 'Titles'
+    type: 'number'
+    description: 'Distinct titles with sales in the selected weeks.'
+    format: "#,##0"
+    definition: @aql count_distinct(sales.isbn) ;;
+  }
+
+  metric avg_price {
+    label: 'Average selling price'
+    type: 'number'
+    description: 'Revenue per unit sold.'
+    format: "[\$\$]#,###0.00"
+    definition: @aql revenue / units ;;
+  }
+
+  metric avg_rating {
+    label: 'Average rating'
+    type: 'number'
+    description: 'Mean star rating across the titles in scope (unweighted by sales).'
+    format: "0.00"
+    definition: @aql books | avg(books.rating) ;;
+  }
+
+  metric revenue_rank {
+    label: 'Rank by revenue'
+    type: 'number'
+    definition: @aql rank(order: revenue | desc()) ;;
+  }
+
+  metric units_whatif {
+    label: 'Units (what-if price change)'
+    type: 'number'
+    description: 'Projected units under the price_factor param with a constant elasticity of -1.6: units × (1 - 1.6 × (price_factor - 1)).'
+    format: "#,##0"
+    definition: @aql units * (1 - 1.6 * (coalesce(books.price_factor | first(), 1) - 1)) ;;
+  }
+
+  metric revenue_whatif {
+    label: 'Revenue (what-if price change)'
+    type: 'number'
+    description: 'Projected revenue under price_factor: projected units × the changed price.'
+    format: "[\$\$]#,###0"
+    definition: @aql units_whatif * avg_price * coalesce(books.price_factor | first(), 1) ;;
+  }
+}

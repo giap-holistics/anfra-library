@@ -1,0 +1,72 @@
+# Library — a 3D drill-down over a governed semantic layer
+
+An anfra Data App for the 2026 anfra App Competition. A book marketplace's catalogue is rendered as a
+low-poly library: six rooms sized by revenue share, eight shelves per room filled by genre share, forty
+spines per shelf, and a book that flies to the camera and opens into a two-page spread with a governed
+what-if. Every number on screen comes from an AQL `explore` against the `library` dataset; the sidebar's
+breadcrumb chips are the live Query Input filters.
+
+Live: https://anfra-library.pages.holistics.dev (served from PR #144 on `holistics/prototypes-deploy`).
+
+## Layout
+
+| Path | What |
+|---|---|
+| `models/books.model.aml`, `models/sales.model.aml` | Two models over DuckDB tables `books` (1,920 titles) and `sales` (24 Monday weeks × title). `books.price_factor` is the what-if param. |
+| `datasets/library.dataset.aml` | Metrics: `units`, `revenue`, `units_prev` / `revenue_prev` (`relative_period`, −12 weeks), `units_growth`, `revenue_share` (`of_all(books)`), `genre_share` (`of_all(books.genre)`), `title_share` (`of_all(books.isbn)`), `titles`, `avg_price`, `avg_rating`, `revenue_rank`, `units_whatif`, `revenue_whatif`. |
+| `data/` | `library.duckdb` plus how it is made: `fetch-real.mjs` (public Amazon book metadata → `books.csv`, synthetic `sales.csv` anchored to each title's popularity; sources and licence notes in `SOURCES.md`), `generate-fake.mjs` (the earlier seeded catalogue), `load.sql`. Rebuild: `node data/fetch-real.mjs && duckdb data/library.new.duckdb < data/load.sql && mv data/library.new.duckdb data/library.duckdb` (write to a new file; the running server holds the old one open). |
+| `src/` | The app as JSDoc-typed ES modules: `data.js` (queries, controls, result cache), `layout.js` (treemap, small-room expansion, camera poses), `scene.js` (three.js: building, interior, exterior, readers, clouds), `anim.js` (scripted loop and interactive state machine), `hover.js` (screen-space hit-testing), `sidebar.js` (paper-themed sidebar and book spread), `debug.js` (`window.__lib` driver), `main.js`, `template.html`. |
+| `build.mjs` | esbuild bundles `src/main.js` with three.js into one IIFE and inlines it into `template.html` → `apps/library.html` (one file, no CDN, native font stacks). |
+| `apps/library.html` | The built Data App. Rebuilt on every `pnpm build`; the server live-reloads it. |
+| `../deploy.sh` | (repo root) Build the app + host image with nix, push it to GHCR, update the prototypes PR. See `../README.md`. |
+
+## Working on it
+
+Everything runs inside the nix shell of this repo's flake (node 22, pnpm, tsc, esbuild, duckdb; anfra itself
+comes from `nix build ..#anfra` or a release binary):
+
+```sh
+cd ~/Dev/anfra-library && nix develop
+cd app
+pnpm install              # three, @types/three, @holistics/anfra-sdk (types only)
+pnpm check                # tsc --checkJs over src/, zero errors expected
+pnpm build                # writes apps/library.html
+anfra validate            # the AML (needs .anfra/data_sources.yml: copy the .example, absolute duckdb path)
+# the custom host in ../host (anfra's toolbar + Inspect panel, app at /) over a core-only anfra:
+ANFRA_SITE_URL=http://localhost:5173 anfra serve --no-apps --addr 127.0.0.1:7878      # core API only, from app/
+(cd ../host && pnpm install && ANFRA_REPO=$PWD/../app ANFRA_URL=http://127.0.0.1:7878 pnpm dev)  # http://localhost:5173/
+# the built-in pages still work without the host: anfra serve --addr 127.0.0.1:3000 → http://127.0.0.1:3000/apps/library
+```
+anfra allows one `serve` per repo, so run either the core-only server or the built-in one, not both. See `../host/NOTES.md`.
+
+AQL facts that bit us on anfra 0.9.0, re-verified unchanged on 0.11.1, and baked into `src/data.js`:
+
+- Alias every metric (`revenue: revenue`); a bare metric comes back `adhoc: true`.
+- Date ranges are `sales.week_start matches @2026-07-27 - 2026-10-18`; string literals use single quotes.
+- A `params {}` block takes positive literals only, hence `price_factor` (0.85 = 15% cheaper) instead of a signed delta. The what-if rewrites the query's AQL text and re-executes.
+- `limit` is not AQL inside the braces; the app uses `pageSize`.
+- A share metric built with `of_all(books.isbn)` is only share-of-shelf when the explore groups by isbn alone; titles are joined client-side from the all-books query.
+- Combining filters with `and` in the AQL text broke `units_prev`; the period and every other reader choice travel as controls (filters, a date drill), never in the text.
+- Since 0.11.1 an unpaged HTTP query returns at most 10,000 rows (`has_more: true` beyond that; `page_size` max 10,000). The app's largest query is 1,920 rows.
+
+## Driving it without a mouse
+
+`window.__lib` (inside the app's sandboxed iframe, `src/debug.js`) exposes `ready`,
+`setMode('anim'|'int')`, `seek(t)`, `tick(dt)` (advance the page's own clock and render one frame),
+`setCam`, `goRoom`, `goShelf`, `openBook`, `setWhatIf`, `setGrain`, `setPrice`, `goLevel`, `state()`,
+`screenRectOf()`. The product UI is interactive only; the scripted loop exists for the demo-video renderer,
+which lives outside this repo.
+
+## Deployment
+
+The app is deployed together with the host as one container image: see [`../README.md`](../README.md)
+("Image" and "Deploy").
+
+## Known gaps
+
+- Room entry takes a few hundred milliseconds of query time; the per-axis shelf-labelling queries could be
+  merged.
+- Under software rendering (headless Chromium with SwiftShader) the scene needs 20–30 s to initialise;
+  on a laptop GPU it is immediate, but frame rate there has not been measured.
+- The small-room expansion (a room under ~26% of the floor grows on entry) is kept but deliberately not
+  shown in the demo.

@@ -1,0 +1,28 @@
+Model sales {
+  type: 'table'
+  label: 'Weekly sales'
+  description: 'Units and revenue per title per week (Monday-starting weeks), 24 weeks ending 2026-10-18.'
+  data_source_name: 'library'
+  table_name: 'sales'
+
+  dimension isbn {
+    label: 'ISBN'
+    type: 'text'
+    definition: @sql {{ #SOURCE.isbn }};;
+  }
+  dimension week_start {
+    label: 'Week'
+    type: 'date'
+    definition: @sql {{ #SOURCE.week_start }};;
+  }
+  dimension units_sold {
+    label: 'Units (row)'
+    type: 'number'
+    definition: @sql {{ #SOURCE.units }};;
+  }
+  dimension revenue_amount {
+    label: 'Revenue (row)'
+    type: 'number'
+    definition: @sql {{ #SOURCE.revenue }};;
+  }
+}

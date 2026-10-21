@@ -1,0 +1,7 @@
+# anfra: data source credentials
+.anfra/data_sources.yml
+node_modules/
+
+# untrusted public-data downloads (data/fetch-real.mjs)
+data/raw/
+data/library.new.duckdb

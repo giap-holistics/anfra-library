@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": { "composite": false, "noEmit": true },
+  "include": ["server"],
+  "exclude": []
+}
