@@ -21,9 +21,9 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import type { IconName } from '../../server/entry';
+import type { IconName } from './entry';
 
-/** The icons a repo's `apps/_meta.yaml` can name (server/entry.ts), each to its component. */
+/** The icons a repo's `apps/_meta.yaml` can name (src/lib/entry.ts), each to its component. */
 const icons: Record<IconName, LucideIcon> = {
   activity: Activity,
   'app-window': AppWindowMac,

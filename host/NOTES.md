@@ -6,67 +6,59 @@ It was developed on the `library-video-host` branch of a fork; this folder is a 
 
 ## Run it
 
-Everything runs inside this repo's nix shell: `nix develop` from the repo root.
+There is no server here any more: the page is embedded in the anfra binary in place of anfra's own Data
+App pages (`../flake.nix`: `host-page`, `mkAnfra`), and `anfra serve` serves it, the app file and the core
+API from one origin. Everything runs inside this repo's nix shell (`nix develop` from the repo root), whose
+`anfra` (0.11.1, source build) carries the built page and the pinned sidecars.
 
-### 1. anfra 0.11.1, core API only
-
-The host is tested against anfra 0.11.1 and `@holistics/anfra-sdk` 0.11.1. The nix shell
-carries the flake's source build and sets `ANFRA_NODE_BIN` / `ANFRA_CANAL_QUERY_BIN` to the pinned sidecars:
+### Development
 
 ```sh
 cd ../app
-ANFRA_SITE_URL=http://localhost:5173 anfra serve --no-apps --addr 127.0.0.1:7878
+ANFRA_APPSERVE_DEV_URL=http://localhost:5173 anfra serve --addr 127.0.0.1:7878
+# and, in host/:
+pnpm install
+pnpm dev        # Vite only, on http://localhost:5173
 ```
 
-- `--no-apps`: anfra serves no pages, only the core API (and `/mcp`). The host serves the app.
-- `--addr 127.0.0.1:7878`: loopback only, because `anfra serve` has no authentication. 7878 is the
-  host's default `ANFRA_URL`.
-- `ANFRA_SITE_URL`: the address the browser uses to reach the host, so export links point at the host.
-  In production, set it to the host's public origin.
+- Open http://127.0.0.1:7878/ (or `/apps/library`): with `ANFRA_APPSERVE_DEV_URL` set, anfra redirects its
+  pages to Vite, which serves the page from source with hot reload and forwards `/api`, `/appserve` and
+  `/health` to anfra (`ANFRA_SERVE_URL`, default `http://127.0.0.1:7878`).
+- No live reload of the app: after `pnpm build` in `app/`, press Reload in the toolbar.
 - anfra allows only one `serve` per repo: a second one fails with `anfra serve is already running for this repo`.
 
-### 2. The host, in development
+### Production
 
-```sh
-cd host
-pnpm install
-ANFRA_REPO=$PWD/../app ANFRA_URL=http://127.0.0.1:7878 pnpm dev
-```
+The embedded build: `pnpm build` writes `dist/page` (Vite base `/appserve/`), and the flake copies it into
+anfra's `internal/appserve/dist` before compiling anfra. `anfra serve` in `../app` (no Vite, no
+`ANFRA_APPSERVE_DEV_URL`) then answers:
 
-- Page (Vite): http://localhost:5173. The Library app opens at `/`, and `/apps/library` also works.
-- Server (Hono): 127.0.0.1:8787. Vite forwards `/api`, `/host`, `/exports` and `/health` to it.
-- When `apps/library.html` changes (`pnpm build` in `app/`), the app reloads in place.
+- `/` and `/apps/library`: the page's `index.html` (`frame-ancestors 'none'`). `/` shows the Library.
+- `/appserve/assets/*`: the page's built files (the favicon is in `public/assets/` so it lands there too).
+- `/appserve/files/library.html`: the app, which the page fetches and mounts in a sandboxed frame.
+- `/api/core.*`: the core API (same-origin POSTs with a JSON body only), `/health`: anfra's status.
 
-### 3. The host, in production
-
-```sh
-pnpm build
-NODE_ENV=production ANFRA_REPO=$PWD/../app ANFRA_URL=http://127.0.0.1:7878 PORT=5173 HOSTNAME=127.0.0.1 pnpm start
-```
-
-One process (`node dist/server/main.js`) serves the page, the API and the app. `/` and `/apps/library`
-return 200 with the Library's link preview (`og:title` "Library"), `/nope` returns 404 and `/health`
-reports the host and anfra versions. Other settings: `TRUST_PROXY=1` (take the client from
-`X-Forwarded-For`, for the rate limits), `QUERY_RATE_LIMIT` (120/min), `EXPORT_RATE_LIMIT` (10/min),
-`MCP=1` (pass anfra's `/mcp` through). The container image (`../flake.nix`) runs exactly this on port 8080.
+The container image (`../flake.nix`) runs exactly this on port 8080.
 
 ## What changed and why
 
 | Change | Why |
 |---|---|
-| `server/root.ts` (new): `rootApp = 'library.html'` | Names the one app the host shows. Both the server and the page import it. |
+| Deleted the Node server (`server/`: Hono, the core API allowlist and rate limits, the app catalogue, live reload, link previews, redirects, `/mcp`), `tsconfig.server.json`, `tsconfig.test.json`, the server tests, `public/og-image.png`, and the `hono`, `@hono/node-server`, `yaml` and `concurrently` dependencies | anfra serves the page itself (embedded), so the page talks to anfra directly. |
+| `vite.config.ts`: `base: '/appserve/'` for the build; dev proxies `/api`, `/appserve`, `/health` to anfra | anfra serves the embedded files below `/appserve/assets/`. |
+| `src/data-app.ts`: the app file from `/appserve/files/` (fetch and `baseHref`) | anfra's file route, sent with `sandbox allow-scripts`. |
+| `src/lib/host.ts`: `catalog()` returns the one entry (`library.html`, "Library") statically; `onRepoEvent` is a no-op; redirects and `health()` removed | No `/host/apps` or `/host/events` any more. The page used neither redirects (none configured) nor `health()`. |
+| `src/lib/root.ts` (moved from `server/root.ts`): `rootApp = 'library.html'`; `src/lib/entry.ts` (moved from `server/entry.ts`) | Names the one app the host shows; the tree's types. |
 | `src/lib/host.ts`: `pathOf('/')` returns `rootApp` | The page shows the Library at `/` without a redirect. `/apps/library` still resolves as before. |
-| `server/app.ts`: the production shell treats `/` as `rootApp` | In production, `/` gets the Library's title and link preview, not the generic page. |
 | `src/App.tsx`: removed `SidebarProvider`, `AppSidebar` and `SidebarInset` | No app browser. The page is a single column: the 48 px toolbar, then the stage, which fills the rest of the viewport. |
 | `src/App.tsx` toolbar | Kept: title, (i) app info, theme toggle (moved here from the removed sidebar footer), Reload, Inspect. Removed: Download picture, Versions (demo data), Ask AI, Prompt (the Library has no recorded prompt). |
 | `src/App.tsx`: the `/` "Home" grid is now "Nothing here." | Only a path that names no app reaches it. |
 | Command palette (Ctrl/Cmd+K) gets `entries={undefined}` | It still offers actions (reload, download PNG/PDF, inspect, theme) but no longer lists apps. |
 | `src/components/theme-toggle.tsx`: light unless the reader picked dark | Matches the Library's paper sidebar. A choice made with the toggle is remembered in `localStorage['theme']`. |
 | Deleted `app-sidebar.tsx`, `home.tsx`, `sidebar-resizer.tsx`, `app-icon.tsx`, `anfra-status.tsx`; removed `filterEntries` and `foldersOf` | Nothing used them once the sidebar was gone. The shadcn `ui/` primitives are left as they were. |
-| `tsconfig.page.json` includes `server/root.ts` | The page's build reads that file. |
 
 The Inspect panel (`src/inspector/`) and `src/data-app.ts` are unchanged: Overview, Data, Structure,
-Queries, Lineage and Wiring. `pnpm typecheck`, `pnpm lint` and `pnpm test` pass.
+Queries, Lineage and Wiring. `pnpm typecheck`, `pnpm lint` and `pnpm test` pass (the page's tests only).
 
 Still reachable from the keyboard: Alt+Shift+C (comment, "Ask AI"), Alt+Shift+V (versions panel, demo
 data) and Alt+Shift+P (prompt, does nothing for the Library).

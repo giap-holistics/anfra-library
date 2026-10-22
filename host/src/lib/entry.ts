@@ -1,5 +1,4 @@
-// Shared with the page (src/lib/host.ts), so the tree the server sends and the one the page reads are one type.
-// No imports: the page's build reads this file too.
+// The Data App tree the page reads (src/lib/host.ts).
 
 /** One node of the Data App tree: a definition, or a folder holding some. Paths are relative to the apps folder, a definition's with its `.html`. */
 export type Entry =
@@ -28,13 +27,9 @@ export type Entry =
       children: Entry[];
     };
 
-/**
- * What `/host/apps` sends: the Data App tree, and where old paths go (the manifest's `redirects`, see
- * server/redirect.ts), so the page can follow an old link it meets without the server.
- */
+/** The Data App tree the page shows (src/lib/host.ts): one app, the root app (src/lib/root.ts). */
 export interface Catalog {
   entries: Entry[];
-  redirects: Record<string, string>;
 }
 
 /** The prompt that made a Data App, from its `<script type="application/json" id="data-app-metadata">`. */

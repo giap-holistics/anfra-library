@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the Library + host image and deploy it to the prototypes platform. Every tool comes from this repo's flake:
 # run it from anywhere with only nix installed; it re-runs itself inside `nix develop` when it is not already there.
-#   1. nix build .#image: anfra v0.11.1 from source + the pinned sidecars + app/ (tsc, then the bundle) + host/ (built
-#      for production) + node 22, linux/amd64. No impure inputs.
+#   1. nix build .#image: anfra v0.11.1 from source with host/'s page embedded + the pinned sidecars + app/ (tsc, then
+#      the bundle), linux/amd64. One process (anfra serve), no Node. No impure inputs.
 #   2. skopeo pushes it to ghcr.io/holistics/<name>:<tag>.
 #   3. proto deploy --image updates the preview PR; the site is https://<name>.pages.holistics.dev
 # Usage: ./deploy.sh [name]          default name: anfra-library
@@ -19,7 +19,7 @@ IMG=ghcr.io/holistics/$NAME:$TAG
 # The image out-link, the skopeo policy and skopeo's blob cache live in a temp dir, not in the repo.
 WORK=${WORK:-$(mktemp -d "${TMPDIR:-/tmp}/anfra-library-deploy.XXXXXX")}
 
-echo "== build the image (app, host, anfra, sidecars: all from the flake)"
+echo "== build the image (app, anfra with the host page, sidecars: all from the flake)"
 nix build "$ROOT#image" -o "$WORK/result-image" || {
   echo "image build failed. If it names a missing anfra-node-* / canal-query-* asset, run: nix run $ROOT#fetch-sidecars" >&2; exit 1; }
 [ -n "${BUILD_ONLY:-}" ] && { echo "image: $WORK/result-image"; exit 0; }

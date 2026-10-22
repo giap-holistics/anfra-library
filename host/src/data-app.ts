@@ -45,8 +45,8 @@ export type {
 export const sdkVersion: string = dependencies['@holistics/anfra-sdk'];
 
 /**
- * The core API, as this host's server lets it through (server/anfra.ts): `core.show`, `core.query`,
- * `core.query.export`, `core.lineage`, and `core.search` for the catalog's models only.
+ * anfra's core API, on the same origin (anfra serves this page): `core.show`, `core.query`,
+ * `core.query.export`, `core.lineage` and `core.search`.
  */
 const api = coreClient('/api');
 
@@ -217,13 +217,13 @@ const clickReporter = `<script>(function(){var K=['container','block','query','c
 /** A Data App definition, as its author wrote it, and where its relative URLs resolve. */
 export async function definition(path: string): Promise<{ html: string; baseHref: string }> {
   const file = path.split('/').map(encodeURIComponent).join('/');
-  const response = await fetch(`/host/files/${file}`);
+  const response = await fetch(`/appserve/files/${file}`);
   if (!response.ok) throw new Error(`Couldn't read ${path}: the server answered ${response.status}.`);
   const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
   // Absolute: the frame's document is a srcdoc, so a relative base would resolve against nothing useful.
   return {
     html: (await response.text()) + keyForwarder + clickReporter,
-    baseHref: `${window.location.origin}/host/files/${dir}`,
+    baseHref: `${window.location.origin}/appserve/files/${dir}`,
   };
 }
 

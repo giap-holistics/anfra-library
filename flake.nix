@@ -1,5 +1,5 @@
 {
-  description = "Library Data App + its cut-down anfra host: dev shell, anfra built from source, proto, one container image";
+  description = "Library Data App + its cut-down anfra host page, embedded in anfra built from source: dev shell, proto, one container image";
 
   # Everything the repo needs comes from here: on a machine with only nix (flakes enabled), `nix develop` gives
   # node 22, pnpm, gh, skopeo, proto, anfra, duckdb, proot …, and `nix build .#image` builds the container from the
@@ -49,7 +49,7 @@
         version = "${baseVersion}+${shortRev}";
 
         # ---- anfra v0.11.1 from source -------------------------------------------------------------------------
-        # anfra's frontend (web/sdk + web/appserve), embedded via internal/appserve/dist.
+        # anfra's own frontend (web/sdk + web/appserve): the upstream Data App pages, for anfra-upstream.
         anfra-web = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
           pname = "anfra-web";
           inherit version;
@@ -74,7 +74,10 @@
           '';
         });
 
-        anfra = (pkgs.buildGoModule.override { inherit go; }) {
+        # anfra with `frontend` (a Vite build whose base is /appserve/) embedded as its Data App pages, in place of
+        # internal/appserve/dist: `anfra serve` answers `/` and `/apps/*` with its index.html and `/appserve/assets/*`
+        # with its files.
+        mkAnfra = { frontend }: (pkgs.buildGoModule.override { inherit go; }) {
           pname = "anfra";
           inherit version;
           src = anfra-src;
@@ -85,7 +88,7 @@
           ldflags = [ "-s" "-w" "-X github.com/holistics/anfra/internal/meta.Version=${version}" ];
           preBuild = ''
             rm -rf internal/appserve/dist
-            cp -r ${anfra-web} internal/appserve/dist
+            cp -r ${frontend} internal/appserve/dist
             chmod -R u+w internal/appserve/dist
           '';
           doCheck = false; # tests need sidecars / a warehouse
@@ -96,6 +99,10 @@
             mainProgram = "anfra";
           };
         };
+        # The image's and the dev shell's anfra: its pages are the Library host page (host/).
+        anfra = mkAnfra { frontend = host-page; };
+        # anfra with its own upstream pages (app browser, no Inspect), to try the Data Folder in anfra's own shell.
+        anfra-upstream = mkAnfra { frontend = anfra-web; };
 
         # ---- the sidecars anfra v0.11.1's manifest.yml pins ---------------------------------------------------------
         # anfra-node-v0.8.0 (holistics/holistics-core) and query-v2.19.1 (holistics/canal): release assets of private
@@ -236,9 +243,9 @@
           '';
         });
 
-        # host/: vite build + tsc, then only what `node dist/server/main.js` needs (production node_modules).
-        host = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
-          pname = "library-host";
+        # host/: the page alone (vite build, base /appserve/), which anfra embeds (mkAnfra). No server: anfra serves it.
+        host-page = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
+          pname = "library-host-page";
           version = "0"; # fixed: the pnpm deps don't refetch on every commit
           src = lib.cleanSourceWith {
             src = ./host;
@@ -249,7 +256,7 @@
             inherit (finalAttrs) pname version src;
             inherit pnpm;
             fetcherVersion = 4;
-            hash = "sha256-KOJuu7J+JkE4PrBuZLB+jFk3RH029ttKu36YgZTYCQw=";
+            hash = "sha256-Ha36zQ7/gbMd9cIbfADn7vGE0n5GXYvIv/hDNlylU+0=";
           };
           buildPhase = ''
             runHook preBuild
@@ -258,13 +265,9 @@
           '';
           installPhase = ''
             runHook preInstall
-            mkdir -p $out
-            cp -r dist package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc $out/
-            (cd $out && CI=1 pnpm install --prod --offline --frozen-lockfile --ignore-scripts)
-            rm -f $out/pnpm-lock.yaml $out/pnpm-workspace.yaml $out/.npmrc
+            cp -r dist/page $out
             runHook postInstall
           '';
-          dontFixup = true; # node_modules: nothing to patch or strip
         });
 
         siteUrl = "https://anfra-library.pages.holistics.dev";
@@ -273,7 +276,6 @@
         image = let
           files = pkgs.runCommand "library-files" {} ''
             mkdir -p $out/srv && cp -r ${library-app} $out/srv/library && chmod -R u+w $out/srv/library
-            mkdir -p $out/srv/host && cp -r ${host}/. $out/srv/host/
             mkdir -p $out/opt/anfra && cp ${sidecars}/bin/anfra-node ${sidecars}/bin/canal-query $out/opt/anfra/ && chmod 755 $out/opt/anfra/*
             mkdir -p $out/lib64 && ln -s ${pkgs.glibc}/lib/ld-linux-x86-64.so.2 $out/lib64/ld-linux-x86-64.so.2
             mkdir -p $out/tmp && chmod 1777 $out/tmp
@@ -282,25 +284,19 @@
           '';
           # The pod's root filesystem may be read-only; /tmp is an emptyDir (values.yaml in the PR). The Data Folder is
           # copied there (-L: the app scanner skips symlinked files) so anfra's runtime file, the sidecar sockets and
-          # DuckDB's WAL land on writable storage. anfra listens on loopback only (it has no auth); the host is public.
+          # DuckDB's WAL land on writable storage. One server process: anfra serves the host page (embedded), the app file,
+          # the core API and /health, on the public port. Not as PID 1: the anfra-node sidecar's watchdog takes a parent
+          # pid of 1 for "my parent died" and exits, so tini is PID 1 (and reaps), anfra its child.
           start = pkgs.writeShellScript "start" ''
             set -u
-            # Ports are fixed on the platform; overridable only so the image can be smoke-tested next to other servers.
-            AP=''${ANFRA_PORT:-7878} HP=''${PORT:-8080}
-            # The image layer is read-only; anfra needs a writable repo for its runtime file, the sidecar sockets and DuckDB's WAL.
             rm -rf /tmp/lib && cp -rL /srv/library /tmp/lib && chmod -R u+w /tmp/lib && cd /tmp/lib || exit 1
-            anfra serve --no-apps --no-watch --no-mcp --addr 127.0.0.1:$AP &
-            # The host is the container's main process: it answers /health with 503 until anfra is up, so the platform's
-            # readiness probe does the waiting, and a dead anfra shows as a failing health check.
-            cd /srv/host
-            NODE_ENV=production ANFRA_REPO=/tmp/lib ANFRA_URL=http://127.0.0.1:$AP PORT=$HP HOSTNAME=0.0.0.0 TRUST_PROXY=1 \
-              exec node dist/server/main.js
+            exec ${pkgs.tini}/bin/tini -s -- anfra serve --no-watch --no-mcp --addr 0.0.0.0:8080
           '';
         in pkgs.dockerTools.buildLayeredImage {
           name = "ghcr.io/holistics/anfra-library";
           tag = "latest";
           # fakeNss: /etc/passwd, /etc/group and nsswitch.conf, which anfra's OS-user lookup and the DuckDB sidecar need.
-          contents = [ files anfra nodejs pkgs.dockerTools.fakeNss pkgs.bashInteractive pkgs.coreutils pkgs.cacert pkgs.tzdata
+          contents = [ files anfra pkgs.dockerTools.fakeNss pkgs.bashInteractive pkgs.coreutils pkgs.cacert pkgs.tzdata
                        pkgs.stdenv.cc.cc.lib pkgs.glibc ];
           config = {
             Env = [
@@ -311,7 +307,7 @@
               "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
               "TZ=Etc/UTC"
               "HOME=/tmp"
-              "PATH=/bin:${anfra}/bin:${nodejs}/bin"
+              "PATH=/bin:${anfra}/bin"
             ];
             WorkingDir = "/tmp";
             ExposedPorts = { "8080/tcp" = {}; };
@@ -320,7 +316,7 @@
         };
       in {
         packages = {
-          inherit anfra anfra-web proto sidecars fetch-sidecars library-app host;
+          inherit anfra anfra-upstream anfra-web host-page proto sidecars fetch-sidecars library-app;
           default = anfra;
         } // lib.optionalAttrs (system == "x86_64-linux") {
           # The platform runs linux/amd64 only.
@@ -336,7 +332,7 @@
           packages = [ nodejs pnpm pkgs.typescript pkgs.esbuild pkgs.duckdb anfra proto fetch-sidecars
                        pkgs.gh pkgs.git pkgs.skopeo pkgs.curl pkgs.jq pkgs.gnutar pkgs.gzip
                        pkgs.coreutils pkgs.findutils pkgs.gnused pkgs.gnugrep pkgs.procps pkgs.bashInteractive ]
-                     ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.proot; # smoke.sh
+                     ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.proot; # smoke-testing the image (README.md)
           shellHook = ''
             export ANFRA_LIBRARY_SHELL=1
             # pnpm 11 matches host/package.json's packageManager: no self-switching.
