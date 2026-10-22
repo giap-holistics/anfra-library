@@ -6,12 +6,12 @@ It was developed on the `library-video-host` branch of a fork; this folder is a 
 
 ## Run it
 
-Everything runs inside this repo's nix shell: `cd ~/Dev/anfra-library && nix develop`.
+Everything runs inside this repo's nix shell: `nix develop` from the repo root.
 
 ### 1. anfra 0.11.1, core API only
 
-The host is tested against anfra 0.11.1 and `@holistics/anfra-sdk` 0.11.1. Use the release binary (its
-sidecars are built in), or the flake's source build with `ANFRA_NODE_BIN` / `ANFRA_CANAL_QUERY_BIN` set:
+The host is tested against anfra 0.11.1 and `@holistics/anfra-sdk` 0.11.1. The nix shell
+carries the flake's source build and sets `ANFRA_NODE_BIN` / `ANFRA_CANAL_QUERY_BIN` to the pinned sidecars:
 
 ```sh
 cd ../app

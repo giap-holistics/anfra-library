@@ -51,11 +51,30 @@
         "type": "github"
       }
     },
+    "proto-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792049081,
+        "narHash": "sha256-W2zI+j/WVRI3K3Omlt9cBef4z8uEHXihYVN81+eUnQk=",
+        "ref": "k8s",
+        "rev": "b309b231ceca72f622a68c66fd1ca990cc722edc",
+        "revCount": 262,
+        "type": "git",
+        "url": "https://github.com/holistics/prototypes-deploy"
+      },
+      "original": {
+        "ref": "k8s",
+        "rev": "b309b231ceca72f622a68c66fd1ca990cc722edc",
+        "type": "git",
+        "url": "https://github.com/holistics/prototypes-deploy"
+      }
+    },
     "root": {
       "inputs": {
         "anfra-src": "anfra-src",
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "proto-src": "proto-src"
       }
     },
     "systems": {
