@@ -287,27 +287,14 @@
             set -u
             # Ports are fixed on the platform; overridable only so the image can be smoke-tested next to other servers.
             AP=''${ANFRA_PORT:-7878} HP=''${PORT:-8080}
+            # The image layer is read-only; anfra needs a writable repo for its runtime file, the sidecar sockets and DuckDB's WAL.
             rm -rf /tmp/lib && cp -rL /srv/library /tmp/lib && chmod -R u+w /tmp/lib && cd /tmp/lib || exit 1
             anfra serve --no-apps --no-watch --no-mcp --addr 127.0.0.1:$AP &
-            A=$!
-            trap 'kill $A ''${H:-} 2>/dev/null; exit 0' TERM INT
-            up() { node -e "fetch('http://127.0.0.1:$AP/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"; }
-            for i in $(seq 1 240); do
-              up && break
-              kill -0 $A 2>/dev/null || { echo "anfra exited before it was healthy" >&2; exit 1; }
-              sleep 0.5
-            done
-            up || { echo "anfra not healthy after 120 s" >&2; exit 1; }
-            echo "anfra healthy; starting the host on :$HP"
+            # The host is the container's main process: it answers /health with 503 until anfra is up, so the platform's
+            # readiness probe does the waiting, and a dead anfra shows as a failing health check.
             cd /srv/host
             NODE_ENV=production ANFRA_REPO=/tmp/lib ANFRA_URL=http://127.0.0.1:$AP PORT=$HP HOSTNAME=0.0.0.0 TRUST_PROXY=1 \
-              node dist/server/main.js &
-            H=$!
-            # Whichever process exits first takes the container down, so the platform restarts it.
-            wait -n $A $H; s=$?
-            echo "a process exited ($s); stopping" >&2
-            kill $A $H 2>/dev/null
-            exit $(( s == 0 ? 1 : s ))
+              exec node dist/server/main.js
           '';
         in pkgs.dockerTools.buildLayeredImage {
           name = "ghcr.io/holistics/anfra-library";

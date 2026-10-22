@@ -77,17 +77,18 @@ bundled in nix; no `node_modules`, `src`, raw data or build files; its own `.anf
 `node_modules`), bash, coreutils, CA certs, tzdata, fakeNss. The flake only sees files git tracks (new files need
 `git add`).
 
-The start command (bash, PID 1):
+The start command (bash):
 
-1. `cp -rL /srv/library /tmp/lib`.
+1. `cp -rL /srv/library /tmp/lib`: the image layer is read-only and anfra needs a writable repo (runtime file,
+   sidecar sockets, DuckDB's WAL).
 2. `anfra serve --no-apps --no-watch --no-mcp --addr 127.0.0.1:7878` in the background, with
    `ANFRA_SITE_URL=https://anfra-library.pages.holistics.dev`. anfra is reachable only from inside the
    container; it has no authentication.
-3. Waits up to 120 s for anfra's `/health` (exits if anfra dies first).
-4. Starts the host: `NODE_ENV=production ANFRA_REPO=/tmp/lib ANFRA_URL=http://127.0.0.1:7878 PORT=8080
-   HOSTNAME=0.0.0.0 TRUST_PROXY=1 node dist/server/main.js` from `/srv/host`.
-5. `wait -n`: when either process exits, it stops the other and the container exits non-zero, so the
-   platform restarts the pod. SIGTERM stops both.
+3. `exec node dist/server/main.js` from `/srv/host` (`NODE_ENV=production ANFRA_REPO=/tmp/lib
+   ANFRA_URL=http://127.0.0.1:7878 PORT=8080 HOSTNAME=0.0.0.0 TRUST_PROXY=1`): the host is the container's
+   main process. It answers `/health` with 503 until anfra is up, so the platform's readiness probe does the
+   waiting; if the host dies the container exits and the pod restarts; if anfra dies the host's health check
+   fails and the liveness probe restarts the pod.
 
 `ANFRA_PORT` and `PORT` override 7878 and 8080, only so the image can be smoke-tested next to other servers
 (`smoke.sh` uses 17878 and 18080).
