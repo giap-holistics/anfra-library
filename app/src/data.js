@@ -45,14 +45,25 @@ export const FULL = { lo: 0, hi: 1e6 };
 /** Price slider bounds (whole dollars); set from the catalogue once it loads. */
 export const PRICE = { min: 3, max: 63 };
 /** Slider position 0..1 for a price: log scale, since prices are long-tailed (median ≈ $14, max > $130). @param {number} v @returns {number} */
-export const priceToPos = (v) => Math.log(Math.max(v, PRICE.min) / PRICE.min) / Math.log(PRICE.max / PRICE.min);
+export const priceToPos = (v) =>
+  Math.log(Math.max(v, PRICE.min) / PRICE.min) / Math.log(PRICE.max / PRICE.min);
 /** Inverse of priceToPos, in dollars. @param {number} p @returns {number} */
 export const posToPrice = (p) => PRICE.min * Math.pow(PRICE.max / PRICE.min, p);
 /** @param {DataState} s @returns {boolean} */
 export const priceOn = (s) => s.lo > FULL.lo || s.hi < FULL.hi;
 
 /** @returns {DataState} */
-export const defaultState = () => ({ period: '12w', lo: FULL.lo, hi: FULL.hi, axis: 'category', room: null, genre: null, isbn: null, factor: 1, grain: 'week' });
+export const defaultState = () => ({
+  period: '12w',
+  lo: FULL.lo,
+  hi: FULL.hi,
+  axis: 'category',
+  room: null,
+  genre: null,
+  isbn: null,
+  factor: 1,
+  grain: 'week',
+});
 
 /* ---------- typed reads at the Row boundary (values arrive as digit strings) ---------- */
 /** @param {Row} row @param {string} key @returns {number} */
@@ -63,7 +74,11 @@ export function num(row, key) {
   return n;
 }
 /** Like num, but a NaN/null (e.g. growth with no previous units) becomes `dflt`. @param {Row} row @param {string} key @param {number} dflt @returns {number} */
-export function numOr(row, key, dflt) { const v = row[key]; if (v == null || v === 'NaN') return dflt; return num(row, key); }
+export function numOr(row, key, dflt) {
+  const v = row[key];
+  if (v == null || v === 'NaN') return dflt;
+  return num(row, key);
+}
 /** @param {Row} row @param {string} key @returns {string} */
 export function str(row, key) {
   const v = row[key];
@@ -174,12 +189,17 @@ function wiring() {
   if (W) return W;
   const app = Anfra.createApp({ title: 'Library', timezone: 'Etc/UTC' });
   /** @param {string} name @param {string} aql @param {number} [pageSize] @returns {Query} */
-  const mk = (name, aql, pageSize) => app.createQuery(name, pageSize ? { dataset: DATASET, aql, pageSize } : { dataset: DATASET, aql });
+  const mk = (name, aql, pageSize) =>
+    app.createQuery(name, pageSize ? { dataset: DATASET, aql, pageSize } : { dataset: DATASET, aql });
   /** @type {Record<QName, Query>} */
   const q = {
     allbooks: mk('allbooks', AQL.allbooks),
-    rooms_category: mk('rooms_category', AQL.rooms('category')), rooms_market: mk('rooms_market', AQL.rooms('market')), rooms_age: mk('rooms_age', AQL.rooms('age')),
-    cases_category: mk('cases_category', AQL.cases('category')), cases_market: mk('cases_market', AQL.cases('market')), cases_age: mk('cases_age', AQL.cases('age')),
+    rooms_category: mk('rooms_category', AQL.rooms('category')),
+    rooms_market: mk('rooms_market', AQL.rooms('market')),
+    rooms_age: mk('rooms_age', AQL.rooms('age')),
+    cases_category: mk('cases_category', AQL.cases('category')),
+    cases_market: mk('cases_market', AQL.cases('market')),
+    cases_age: mk('cases_age', AQL.cases('age')),
     shelves: mk('shelves', AQL.shelves),
     topshelf: mk('topshelf', AQL.topshelf, 40),
     series: mk('series', AQL.series(1)),
@@ -197,10 +217,22 @@ function wiring() {
   const isbn = app.createFilter('book_isbn', { field: 'books.isbn' });
   const drill = app.createDateDrill('grain', { default: 'week' });
   for (const n of QNAMES) app.mapControl(period, q[n], { field: 'sales.week_start' });
-  for (const n of /** @type {QName[]} */ (['allbooks', 'rooms_category', 'rooms_market', 'rooms_age', 'shelves', 'topshelf'])) app.mapControl(price, q[n], { field: 'books.price' });
-  for (const a of /** @type {Axis[]} */ (['category', 'market', 'age'])) for (const n of /** @type {QName[]} */ (['shelves', 'topshelf', 'series', 'book'])) app.mapControl(room[a], q[n], { field: AXF[a] });
-  for (const n of /** @type {QName[]} */ (['topshelf', 'series', 'book'])) app.mapControl(genre, q[n], { field: 'books.genre' });
-  for (const n of /** @type {QName[]} */ (['series', 'book'])) app.mapControl(isbn, q[n], { field: 'books.isbn' });
+  for (const n of /** @type {QName[]} */ ([
+    'allbooks',
+    'rooms_category',
+    'rooms_market',
+    'rooms_age',
+    'shelves',
+    'topshelf',
+  ]))
+    app.mapControl(price, q[n], { field: 'books.price' });
+  for (const a of /** @type {Axis[]} */ (['category', 'market', 'age']))
+    for (const n of /** @type {QName[]} */ (['shelves', 'topshelf', 'series', 'book']))
+      app.mapControl(room[a], q[n], { field: AXF[a] });
+  for (const n of /** @type {QName[]} */ (['topshelf', 'series', 'book']))
+    app.mapControl(genre, q[n], { field: 'books.genre' });
+  for (const n of /** @type {QName[]} */ (['series', 'book']))
+    app.mapControl(isbn, q[n], { field: 'books.isbn' });
   app.mapControl(drill, q.series, { field: 'sales.week_start' });
   W = { app, q, period, price, room, genre, isbn, drill };
   return W;
@@ -214,14 +246,27 @@ const ck = (n, s) => n + '#' + DEPS[n](s);
 /** @param {QName} n @param {DataState} s @returns {Snap|undefined} */
 export const snap = (n, s) => CACHE.get(ck(n, s));
 /** Live status for the sidebar. */
-export const status = { pending: 0, errors: /** @type {string[]} */ ([]), cols: 0, measures: 0, adhoc: 0, runs: 0 };
+export const status = {
+  pending: 0,
+  errors: /** @type {string[]} */ ([]),
+  cols: 0,
+  measures: 0,
+  adhoc: 0,
+  runs: 0,
+};
 
 /** @param {DataState} s */
 function apply(s) {
-  const w = wiring(), p = periodOf(s.period);
+  const w = wiring(),
+    p = periodOf(s.period);
   w.period.setCondition({ operator: 'between', values: [p.from, p.to] });
-  w.price.setCondition(priceOn(s) ? { operator: 'between', values: [String(s.lo), String(s.hi)] } : { operator: 'none' });
-  for (const a of /** @type {Axis[]} */ (['category', 'market', 'age'])) w.room[a].setCondition(s.room != null && s.axis === a ? { operator: 'is', values: [s.room] } : { operator: 'none' });
+  w.price.setCondition(
+    priceOn(s) ? { operator: 'between', values: [String(s.lo), String(s.hi)] } : { operator: 'none' },
+  );
+  for (const a of /** @type {Axis[]} */ (['category', 'market', 'age']))
+    w.room[a].setCondition(
+      s.room != null && s.axis === a ? { operator: 'is', values: [s.room] } : { operator: 'none' },
+    );
   w.genre.setCondition(s.genre != null ? { operator: 'is', values: [s.genre] } : { operator: 'none' });
   w.isbn.setCondition(s.isbn != null ? { operator: 'is', values: [s.isbn] } : { operator: 'none' });
   w.drill.setGrain(s.grain);
@@ -236,30 +281,42 @@ const have = (s, need) => need.every((n) => CACHE.has(ck(n, s)));
 /** @param {DataState} s @returns {Promise<void>} */
 async function run(s) {
   const w = wiring();
-  apply(s); applied = sigOf(s);
+  apply(s);
+  applied = sigOf(s);
   const t0 = performance.now();
   const res = await w.app.execute();
   const ms = Math.round(performance.now() - t0);
   status.runs++;
   status.errors = res.failed.map((n) => `${n}: ${w.q[/** @type {QName} */ (n)]?.error?.message ?? 'failed'}`);
   for (const e of status.errors) console.warn('[library] query failed', e);
-  let cols = 0, meas = 0, adhoc = 0;
+  let cols = 0,
+    meas = 0,
+    adhoc = 0;
   for (const n of QNAMES) {
-    const q = w.q[n], r = q.result;
+    const q = w.q[n],
+      r = q.result;
     if (!r) continue;
-    cols += r.columns.length; meas += r.columns.filter((c) => c.isMeasure).length; adhoc += r.columns.filter((c) => c.adhoc).length;
+    cols += r.columns.length;
+    meas += r.columns.filter((c) => c.isMeasure).length;
+    adhoc += r.columns.filter((c) => c.adhoc).length;
     if (q.state !== 'success') continue;
     const k = ck(n, s);
     // a query that was not dirty kept the result of the same inputs: keep its original latency
     const prev = CACHE.get(k);
-    CACHE.set(k, { rows: r.rows, aql: r.debug?.executedAql ?? q.declaration.aql, n: r.meta.numRows, ms: res.succeeded.includes(n) ? ms : prev ? prev.ms : ms });
+    CACHE.set(k, {
+      rows: r.rows,
+      aql: r.debug?.executedAql ?? q.declaration.aql,
+      n: r.meta.numRows,
+      ms: res.succeeded.includes(n) ? ms : prev ? prev.ms : ms,
+    });
   }
   Object.assign(status, { cols, measures: meas, adhoc });
 }
 
 let chain = Promise.resolve();
 /** Everything `apply` writes into the controls and AQL, as one string. @param {DataState} s @returns {string} */
-const sigOf = (s) => [s.period, s.lo, s.hi, s.axis, s.room, s.genre, s.isbn, factorLit(s.factor), s.grain].join('|');
+const sigOf = (s) =>
+  [s.period, s.lo, s.hi, s.axis, s.room, s.genre, s.isbn, factorLit(s.factor), s.grain].join('|');
 /** The state the controls were last executed with, and the state the page shows. */
 let applied = '';
 /** @type {DataState|null} */ let shown = null;
@@ -274,23 +331,46 @@ export function request(s, need = QNAMES) {
   const st = { ...s };
   if (have(st, need) && (!shown || applied === sigOf(shown))) return Promise.resolve();
   status.pending++;
-  const p = chain.then(() => (have(st, need) && (!shown || applied === sigOf(shown)) ? undefined : run(have(st, need) && shown ? shown : st)))
-    .finally(() => { status.pending--; setTimeout(settle, 0); });
-  const safe = p.catch((e) => { console.error('[library] execute', e); });
+  const p = chain
+    .then(() =>
+      have(st, need) && (!shown || applied === sigOf(shown))
+        ? undefined
+        : run(have(st, need) && shown ? shown : st),
+    )
+    .finally(() => {
+      status.pending--;
+      setTimeout(settle, 0);
+    });
+  const safe = p.catch((e) => {
+    console.error('[library] execute', e);
+  });
   chain = safe;
   return safe; // never rejects: a failed run shows in status.errors
 }
 /** With the queue drained (a sequence of prefetches does not count), put the controls back on the shown state. */
-function settle() { if (status.pending === 0 && shown && applied !== sigOf(shown)) void request(shown, []); }
+function settle() {
+  if (status.pending === 0 && shown && applied !== sigOf(shown)) void request(shown, []);
+}
 /**
  * The page now shows state `s`: fetch what it needs, and keep the controls on it. Cached answers are
  * still read at once; the queries re-run only if their controls had moved to another state.
  * @param {DataState} s @param {QName[]} [need] @returns {Promise<void>}
  */
-export function display(s, need = QNAMES) { shown = { ...s }; return request(s, need); }
+export function display(s, need = QNAMES) {
+  shown = { ...s };
+  return request(s, need);
+}
 /** The queries each level needs. @type {Record<'all'|'room'|'sh'|'bk', QName[]>} */
 export const NEED = {
-  all: ['allbooks', 'rooms_category', 'rooms_market', 'rooms_age', 'cases_category', 'cases_market', 'cases_age'],
+  all: [
+    'allbooks',
+    'rooms_category',
+    'rooms_market',
+    'rooms_age',
+    'cases_category',
+    'cases_market',
+    'cases_age',
+  ],
   room: ['allbooks', 'rooms_category', 'rooms_market', 'rooms_age', 'shelves'],
   sh: ['allbooks', 'shelves', 'topshelf'],
   bk: ['book', 'series', 'topshelf', 'shelves'],
@@ -321,34 +401,83 @@ export function loadCatalogue(sn) {
     const rows = [...sn.rows].sort((a, b) => (str(a, 'isbn') < str(b, 'isbn') ? -1 : 1));
     rows.forEach((r, idx) => {
       /** @type {Book} */
-      const b = { idx, isbn: str(r, 'isbn'), title: str(r, 'title'), author: str(r, 'author'), category: str(r, 'category'), genre: str(r, 'genre'), market: str(r, 'market'),
-        age: str(r, 'age'), format: str(r, 'format'), price: num(r, 'price'), rating: num(r, 'rating'), hue: num(r, 'hue'), units: 0, revenue: 0, unitsPrev: 0 };
-      BOOKS.push(b); BY_ISBN.set(b.isbn, b);
+      const b = {
+        idx,
+        isbn: str(r, 'isbn'),
+        title: str(r, 'title'),
+        author: str(r, 'author'),
+        category: str(r, 'category'),
+        genre: str(r, 'genre'),
+        market: str(r, 'market'),
+        age: str(r, 'age'),
+        format: str(r, 'format'),
+        price: num(r, 'price'),
+        rating: num(r, 'rating'),
+        hue: num(r, 'hue'),
+        units: 0,
+        revenue: 0,
+        unitsPrev: 0,
+      };
+      BOOKS.push(b);
+      BY_ISBN.set(b.isbn, b);
     });
     PRICE.min = Math.floor(Math.min(...BOOKS.map((b) => b.price)));
     PRICE.max = Math.ceil(Math.max(...BOOKS.map((b) => b.price)));
   }
-  for (const b of BOOKS) { b.units = 0; b.revenue = 0; b.unitsPrev = 0; }
-  for (const r of sn.rows) { const b = BY_ISBN.get(str(r, 'isbn')); if (b) { b.units = num(r, 'units'); b.revenue = num(r, 'revenue'); b.unitsPrev = numOr(r, 'units_prev', 0); } }
+  for (const b of BOOKS) {
+    b.units = 0;
+    b.revenue = 0;
+    b.unitsPrev = 0;
+  }
+  for (const r of sn.rows) {
+    const b = BY_ISBN.get(str(r, 'isbn'));
+    if (b) {
+      b.units = num(r, 'units');
+      b.revenue = num(r, 'revenue');
+      b.unitsPrev = numOr(r, 'units_prev', 0);
+    }
+  }
 }
 
 /** Rooms (canonical order) with their top-8 shelves, for one axis at the period's full price range. @param {Axis} axis @param {DataState} s @returns {AxisData} */
 export function axisData(axis, s) {
   const full = { ...s, ...FULL };
-  const rs = snap(/** @type {QName} */ ('rooms_' + axis), full), cs = snap(/** @type {QName} */ ('cases_' + axis), full);
+  const rs = snap(/** @type {QName} */ ('rooms_' + axis), full),
+    cs = snap(/** @type {QName} */ ('cases_' + axis), full);
   if (!rs || !cs) throw new Error(`rooms/cases for ${axis} not loaded`);
   const names = [...ORDER[axis]];
-  for (const r of rs.rows) { const n = str(r, 'room'); if (!names.includes(n)) names.push(n); }
+  for (const r of rs.rows) {
+    const n = str(r, 'room');
+    if (!names.includes(n)) names.push(n);
+  }
   const present = names.filter((n) => rs.rows.some((r) => str(r, 'room') === n));
   if (present.length !== 6) throw new Error(`the library has 6 rooms; axis ${axis} has ${present.length}`);
   const areas = present.map((name) => {
     const r = /** @type {Row} */ (rs.rows.find((x) => str(x, 'room') === name));
     const books = BOOKS.filter((b) => axisVal(b, axis) === name);
-    const shelves = cs.rows.filter((x) => str(x, 'room') === name).slice(0, 8).map((x, i) => ({
-      genre: str(x, 'genre'), area: name, rank: i + 1, share: num(x, 'genre_share'), revenue: num(x, 'revenue'), units: num(x, 'units'), delta: numOr(x, 'units_growth', 0),
-      books: books.filter((b) => b.genre === str(x, 'genre')).sort((a, b) => b.units - a.units),
-    }));
-    return { name, revenue: num(r, 'revenue'), units: num(r, 'units'), unitsPrev: numOr(r, 'units_prev', 0), delta: numOr(r, 'units_growth', 0), share: num(r, 'revenue_share'), books, shelves };
+    const shelves = cs.rows
+      .filter((x) => str(x, 'room') === name)
+      .slice(0, 8)
+      .map((x, i) => ({
+        genre: str(x, 'genre'),
+        area: name,
+        rank: i + 1,
+        share: num(x, 'genre_share'),
+        revenue: num(x, 'revenue'),
+        units: num(x, 'units'),
+        delta: numOr(x, 'units_growth', 0),
+        books: books.filter((b) => b.genre === str(x, 'genre')).sort((a, b) => b.units - a.units),
+      }));
+    return {
+      name,
+      revenue: num(r, 'revenue'),
+      units: num(r, 'units'),
+      unitsPrev: numOr(r, 'units_prev', 0),
+      delta: numOr(r, 'units_growth', 0),
+      share: num(r, 'revenue_share'),
+      books,
+      shelves,
+    };
   });
   return { axis, areas };
 }
@@ -373,22 +502,75 @@ const rowBy = (sn, col, v) => sn.rows.find((r) => r[col] === v);
 /** The scope card for a level, or null while its query is still running. @param {Key} key @param {DataState} s @returns {Scope|null} */
 export function scopeOf(key, s) {
   if (key === 'all') {
-    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s); if (!sn) return null;
-    let rev = 0, u = 0, up = 0, sh = 0, rt = 0, ti = 0;
-    for (const r of sn.rows) { rev += num(r, 'revenue'); u += num(r, 'units'); up += numOr(r, 'units_prev', 0); sh += num(r, 'revenue_share'); const t = num(r, 'titles'); rt += num(r, 'avg_rating') * t; ti += t; }
-    return { name: 'All books' + psfx(s), rev, u, d: up ? u / up - 1 : 0, ap: u ? rev / u : 0, rt: ti ? rt / ti : 0, sh };
+    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s);
+    if (!sn) return null;
+    let rev = 0,
+      u = 0,
+      up = 0,
+      sh = 0,
+      rt = 0,
+      ti = 0;
+    for (const r of sn.rows) {
+      rev += num(r, 'revenue');
+      u += num(r, 'units');
+      up += numOr(r, 'units_prev', 0);
+      sh += num(r, 'revenue_share');
+      const t = num(r, 'titles');
+      rt += num(r, 'avg_rating') * t;
+      ti += t;
+    }
+    return {
+      name: 'All books' + psfx(s),
+      rev,
+      u,
+      d: up ? u / up - 1 : 0,
+      ap: u ? rev / u : 0,
+      rt: ti ? rt / ti : 0,
+      sh,
+    };
   }
   if (key === 'room') {
-    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s), r = sn && s.room != null ? rowBy(sn, 'room', s.room) : undefined; if (!r) return null;
-    return { name: (s.room ?? '') + psfx(s), rev: num(r, 'revenue'), u: num(r, 'units'), d: numOr(r, 'units_growth', 0), ap: numOr(r, 'avg_price', 0), rt: numOr(r, 'avg_rating', 0), sh: num(r, 'revenue_share') };
+    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s),
+      r = sn && s.room != null ? rowBy(sn, 'room', s.room) : undefined;
+    if (!r) return null;
+    return {
+      name: (s.room ?? '') + psfx(s),
+      rev: num(r, 'revenue'),
+      u: num(r, 'units'),
+      d: numOr(r, 'units_growth', 0),
+      ap: numOr(r, 'avg_price', 0),
+      rt: numOr(r, 'avg_rating', 0),
+      sh: num(r, 'revenue_share'),
+    };
   }
   if (key === 'sh') {
-    const sn = snap('shelves', s), r = sn && s.genre != null ? rowBy(sn, 'genre', s.genre) : undefined; if (!r) return null;
-    return { name: (s.genre ?? '') + psfx(s), rev: num(r, 'revenue'), u: num(r, 'units'), d: numOr(r, 'units_growth', 0), ap: numOr(r, 'avg_price', 0), rt: numOr(r, 'avg_rating', 0), sh: num(r, 'genre_share') };
+    const sn = snap('shelves', s),
+      r = sn && s.genre != null ? rowBy(sn, 'genre', s.genre) : undefined;
+    if (!r) return null;
+    return {
+      name: (s.genre ?? '') + psfx(s),
+      rev: num(r, 'revenue'),
+      u: num(r, 'units'),
+      d: numOr(r, 'units_growth', 0),
+      ap: numOr(r, 'avg_price', 0),
+      rt: numOr(r, 'avg_rating', 0),
+      sh: num(r, 'genre_share'),
+    };
   }
-  const sn = snap('book', s), r = sn && sn.rows[0], ts = snap('topshelf', s), tr = ts && s.isbn != null ? rowBy(ts, 'isbn', s.isbn) : undefined;
+  const sn = snap('book', s),
+    r = sn && sn.rows[0],
+    ts = snap('topshelf', s),
+    tr = ts && s.isbn != null ? rowBy(ts, 'isbn', s.isbn) : undefined;
   if (!r) return null;
-  return { name: 'isbn …' + (s.isbn ?? '').slice(-5), rev: num(r, 'revenue'), u: num(r, 'units'), d: numOr(r, 'units_growth', 0), ap: numOr(r, 'avg_price', 0), rt: numOr(r, 'avg_rating', 0), sh: tr ? num(tr, 'title_share') : 0 };
+  return {
+    name: 'isbn …' + (s.isbn ?? '').slice(-5),
+    rev: num(r, 'revenue'),
+    u: num(r, 'units'),
+    d: numOr(r, 'units_growth', 0),
+    ap: numOr(r, 'avg_price', 0),
+    rt: numOr(r, 'avg_rating', 0),
+    sh: tr ? num(tr, 'title_share') : 0,
+  };
 }
 
 /**
@@ -398,25 +580,67 @@ export function scopeOf(key, s) {
  */
 export function kidsOf(key, s, hl) {
   if (key === 'all') {
-    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s); if (!sn) return null;
-    const order = [...ORDER[s.axis]], rows = [...sn.rows].sort((a, b) => order.indexOf(str(a, 'room')) - order.indexOf(str(b, 'room')));
-    return { h: `Rooms · by ${AXL[s.axis]}`, h2: 'share of revenue', n: sn.n, rows: rows.map((r) => [str(r, 'room'), num(r, 'revenue_share'), (num(r, 'revenue_share') * 100).toFixed(1) + '%', str(r, 'room') === hl]) };
+    const sn = snap(/** @type {QName} */ ('rooms_' + s.axis), s);
+    if (!sn) return null;
+    const order = [...ORDER[s.axis]],
+      rows = [...sn.rows].sort((a, b) => order.indexOf(str(a, 'room')) - order.indexOf(str(b, 'room')));
+    return {
+      h: `Rooms · by ${AXL[s.axis]}`,
+      h2: 'share of revenue',
+      n: sn.n,
+      rows: rows.map((r) => [
+        str(r, 'room'),
+        num(r, 'revenue_share'),
+        (num(r, 'revenue_share') * 100).toFixed(1) + '%',
+        str(r, 'room') === hl,
+      ]),
+    };
   }
   if (key === 'room') {
-    const sn = snap('shelves', s); if (!sn) return null;
-    return { h: `Shelves in ${s.room}`, h2: 'share of room', n: sn.n, rows: sn.rows.slice(0, 8).map((r) => [str(r, 'genre'), num(r, 'genre_share'), (num(r, 'genre_share') * 100).toFixed(1) + '%', str(r, 'genre') === hl]) };
+    const sn = snap('shelves', s);
+    if (!sn) return null;
+    return {
+      h: `Shelves in ${s.room}`,
+      h2: 'share of room',
+      n: sn.n,
+      rows: sn.rows
+        .slice(0, 8)
+        .map((r) => [
+          str(r, 'genre'),
+          num(r, 'genre_share'),
+          (num(r, 'genre_share') * 100).toFixed(1) + '%',
+          str(r, 'genre') === hl,
+        ]),
+    };
   }
-  const sn = snap('topshelf', s); if (!sn) return null;
-  return { h: priceOn(s) ? `Top on shelf · $${s.lo}–$${s.hi}` : `Top on ${s.genre} shelf`, h2: 'units', n: sn.n,
-    rows: sn.rows.slice(0, 8).map((r) => { const b = BY_ISBN.get(str(r, 'isbn')); return [b ? b.title : str(r, 'isbn'), num(r, 'units'), fmtInt(num(r, 'units')), str(r, 'isbn') === hl]; }) };
+  const sn = snap('topshelf', s);
+  if (!sn) return null;
+  return {
+    h: priceOn(s) ? `Top on shelf · $${s.lo}–$${s.hi}` : `Top on ${s.genre} shelf`,
+    h2: 'units',
+    n: sn.n,
+    rows: sn.rows.slice(0, 8).map((r) => {
+      const b = BY_ISBN.get(str(r, 'isbn'));
+      return [b ? b.title : str(r, 'isbn'), num(r, 'units'), fmtInt(num(r, 'units')), str(r, 'isbn') === hl];
+    }),
+  };
 }
 
 /** The topshelf row of one book (tips, rank, share of shelf). @param {DataState} s @param {string} isbn @returns {Row|undefined} */
-export function topRow(s, isbn) { const sn = snap('topshelf', s); return sn ? rowBy(sn, 'isbn', isbn) : undefined; }
+export function topRow(s, isbn) {
+  const sn = snap('topshelf', s);
+  return sn ? rowBy(sn, 'isbn', isbn) : undefined;
+}
 
 /** The query whose numbers a level shows (for the Executed AQL footer). @param {Key} key @param {DataState} s @returns {Snap|undefined} */
 export function levelSnap(key, s) {
-  return key === 'all' ? snap(/** @type {QName} */ ('rooms_' + s.axis), s) : key === 'room' ? snap('shelves', s) : key === 'sh' ? snap('topshelf', s) : snap('book', s);
+  return key === 'all'
+    ? snap(/** @type {QName} */ ('rooms_' + s.axis), s)
+    : key === 'room'
+      ? snap('shelves', s)
+      : key === 'sh'
+        ? snap('topshelf', s)
+        : snap('book', s);
 }
 
 /** The description of a dataset metric when the descriptor carries it; the SDK 0.9 descriptor drops descriptions, so fall back to the AML text. @param {string} metric @returns {string} */

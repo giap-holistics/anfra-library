@@ -22,18 +22,26 @@ export function syncLayer() {
     /** @type {HTMLElement[]} */ const next = [];
     for (const o of list) {
       let el = live.get(o.id);
-      if (!el) { el = document.createElement('div'); el.dataset.anfraBlock = o.id; }
+      if (!el) {
+        el = document.createElement('div');
+        el.dataset.anfraBlock = o.id;
+      }
       if (el.dataset.anfraLabel !== o.label) el.dataset.anfraLabel = o.label;
       if (el.dataset.anfraQuery !== o.query) el.dataset.anfraQuery = o.query;
       next.push(el);
     }
-    live.clear(); for (const el of next) live.set(/** @type {string} */ (el.dataset.anfraBlock), el);
+    live.clear();
+    for (const el of next) live.set(/** @type {string} */ (el.dataset.anfraBlock), el);
     layer.replaceChildren(...next); // keeps DOM order = object order, so the Inspect keys stay put
   }
   for (const o of list) {
-    const el = /** @type {HTMLElement} */ (live.get(o.id)), r = o.rect;
+    const el = /** @type {HTMLElement} */ (live.get(o.id)),
+      r = o.rect;
     // clipped to the viewport, so an outline never spills over the sidebar
-    const x0 = Math.max(0, r.x), y0 = Math.max(0, r.y), x1 = Math.min(VP.w, r.x + r.w), y1 = Math.min(VP.h, r.y + r.h);
+    const x0 = Math.max(0, r.x),
+      y0 = Math.max(0, r.y),
+      x1 = Math.min(VP.w, r.x + r.w),
+      y1 = Math.min(VP.h, r.y + r.h);
     el.style.transform = `translate(${x0.toFixed(1)}px,${y0.toFixed(1)}px) scale(${((x1 - x0) / BASE).toFixed(4)},${((y1 - y0) / BASE).toFixed(4)})`;
   }
 }
